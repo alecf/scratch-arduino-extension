@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist/",
+        "sourceMap": true,
+        // Goal is to turn this on!
+        //"noImplicitAny": true,
+        "module": "es6",
+        "target": "es6",
+        // "jsx": "react",
+        "allowJs": true
+      }
+}
