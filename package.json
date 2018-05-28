@@ -1,0 +1,27 @@
+{
+  "name": "scratch-arduino-extension",
+  "version": "1.0.0",
+  "description": "",
+  "main": "arduino_extension.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alecf/scratch-arduino-extension.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alecf/scratch-arduino-extension/issues"
+  },
+  "homepage": "https://github.com/alecf/scratch-arduino-extension#readme",
+  "devDependencies": {
+    "webpack": "^4.9.1",
+    "webpack-cli": "^2.1.4"
+  }
+}
