@@ -3,7 +3,7 @@ const ext: any = {};
 // XXX temp
 let command;
 
-var PIN_MODE = 0xF4,
+const PIN_MODE = 0xF4,
     REPORT_DIGITAL = 0xD0,
     REPORT_ANALOG = 0xC0,
     DIGITAL_MESSAGE = 0x90,
@@ -17,7 +17,7 @@ var PIN_MODE = 0xF4,
     CAPABILITY_QUERY = 0x6B,
     CAPABILITY_RESPONSE = 0x6C;
 
-var INPUT = 0x00,
+const INPUT = 0x00,
     OUTPUT = 0x01,
     ANALOG = 0x02,
     PWM = 0x03,
@@ -29,24 +29,25 @@ var INPUT = 0x00,
     ENCODER = 0x09,
     IGNORE = 0x7F;
 
-var LOW = 0,
+const LOW = 0,
     HIGH = 1;
 
-var MAX_DATA_BYTES = 4096;
-var MAX_PINS = 128;
+const MAX_DATA_BYTES = 4096;
+const MAX_PINS = 128;
 
 var parsingSysex = false,
     waitForData = 0,
     executeMultiByteCommand = 0,
     multiByteChannel = 0,
-    sysexBytesRead = 0,
-    storedInputData = new Uint8Array(MAX_DATA_BYTES);
+    sysexBytesRead = 0;
+const storedInputData = new Uint8Array(MAX_DATA_BYTES);
 
-var digitalOutputData = new Uint8Array(16),
+const digitalOutputData = new Uint8Array(16),
     digitalInputData = new Uint8Array(16),
     analogInputData = new Uint16Array(16);
 
 var analogChannel = new Uint8Array(MAX_PINS);
+
 var pinModes: number[][] = [];
 for (var i = 0; i < 11; i++) pinModes[i] = [];
 
@@ -56,11 +57,11 @@ interface DeviceEntry {
     val: number;
 }
 
-type openParams = ({ stopBits: number, bitRate: number, ctsFlowControl: number });
+type OpenParams = ({ stopBits: number, bitRate: number, ctsFlowControl: number });
 interface Device {
     id: string;
     send: (s: ArrayBuffer) => void;
-    open: (params: openParams,
+    open: (params: OpenParams,
         callback: () => void) => void;
     set_receive_handler: (callback: (data) => void) => void;
     close: () => void;
@@ -71,7 +72,7 @@ var majorVersion = 0,
 
 var connected = false;
 var notifyConnection = false;
-var device: Device = null;
+var currentDevice: Device = null;
 var inputData = null;
 
 // TEMPORARY WORKAROUND
@@ -80,8 +81,6 @@ var inputData = null;
 var pinging = false;
 var pingCount = 0;
 var pinger: number = null;
-
-
 
 class HWList {
     devices: DeviceEntry[];
@@ -117,10 +116,10 @@ function init() {
 
     for (var i = 0; i < 16; i++) {
         var output = new Uint8Array([REPORT_DIGITAL | i, 0x01]);
-        device.send(output.buffer);
+        currentDevice.send(output.buffer);
     }
 
-    queryCapabilities();
+    queryCapabilities(currentDevice);
 
     // TEMPORARY WORKAROUND
     // Since _deviceRemoved is not used with Serial devices
@@ -131,19 +130,19 @@ function init() {
                 clearInterval(pinger);
                 pinger = null;
                 connected = false;
-                if (device) device.close();
-                delete devicesSeen[device.id];
+                if (currentDevice) currentDevice.close();
+                delete devicesSeen[currentDevice.id];
                 console.log('disconnecting: ', pingCount, 'pings')
-                device = null;
+                currentDevice = null;
                 return;
             }
         } else {
-            if (!device) {
+            if (!currentDevice) {
                 clearInterval(pinger);
                 pinger = null;
                 return;
             }
-            queryFirmware();
+            queryFirmware(currentDevice);
             pinging = true;
         }
     }, 100);
@@ -156,21 +155,21 @@ function hasCapability(pin: number, mode: number) {
         return false;
 }
 
-function queryFirmware() {
-    console.log('queryFirmware on ', device.id);
+function queryFirmware(device: Device) {
+    console.log('querying firmware...');
     var output = new Uint8Array([START_SYSEX, QUERY_FIRMWARE, END_SYSEX]);
     device.send(output.buffer);
 }
 
-function queryCapabilities() {
-    console.log('Querying ' + device.id + ' capabilities');
+function queryCapabilities(device: Device) {
+    console.log('Querying ' + currentDevice.id + ' capabilities');
     var msg = new Uint8Array([
         START_SYSEX, CAPABILITY_QUERY, END_SYSEX]);
     device.send(msg.buffer);
 }
 
-function queryAnalogMapping() {
-    console.log('Querying ' + device.id + ' analog mapping');
+function queryAnalogMapping(device: Device) {
+    console.log('Querying ' + currentDevice.id + ' analog mapping');
     var msg = new Uint8Array([
         START_SYSEX, ANALOG_MAPPING_QUERY, END_SYSEX]);
     device.send(msg.buffer);
@@ -189,7 +188,7 @@ function setVersion(major: number, minor: number) {
     minorVersion = minor;
 }
 
-function processSysexMessage() {
+function processSysexMessage(device: Device) {
     console.log("Sysex Message:");
     console.log(storedInputData);
     switch (storedInputData[0]) {
@@ -201,7 +200,7 @@ function processSysexMessage() {
                 }
                 if (i == sysexBytesRead) break;
             }
-            queryAnalogMapping();
+            queryAnalogMapping(device);
             break;
         case ANALOG_MAPPING_RESPONSE:
             for (var pin = 0; pin < analogChannel.length; pin++)
@@ -237,14 +236,14 @@ function processSysexMessage() {
     }
 }
 
-function processInput(inputData: Uint8Array) {
+function processInput(device: Device, inputData: Uint8Array) {
     console.log('processInputData(', inputData, ')');
     for (var i = 0; i < inputData.length; i++) {
 
         if (parsingSysex) {
             if (inputData[i] == END_SYSEX) {
                 parsingSysex = false;
-                processSysexMessage();
+                processSysexMessage(device);
             } else {
                 storedInputData[sysexBytesRead++] = inputData[i];
             }
@@ -288,7 +287,7 @@ function processInput(inputData: Uint8Array) {
 
 function pinMode(pin: number, mode: number) {
     var msg = new Uint8Array([PIN_MODE, pin, mode]);
-    device.send(msg.buffer);
+    currentDevice.send(msg.buffer);
 }
 
 function analogRead(pin: number) {
@@ -325,7 +324,7 @@ function analogWrite(pin: number, val: number) {
         ANALOG_MESSAGE | (pin & 0x0F),
         val & 0x7F,
         val >> 7]);
-    device.send(msg.buffer);
+    currentDevice.send(msg.buffer);
 }
 
 function digitalWrite(pin: number, val: number) {
@@ -343,7 +342,7 @@ function digitalWrite(pin: number, val: number) {
         DIGITAL_MESSAGE | portNum,
         digitalOutputData[portNum] & 0x7F,
         digitalOutputData[portNum] >> 0x07]);
-    device.send(msg.buffer);
+    currentDevice.send(msg.buffer);
 }
 
 function rotateServo(pin, deg) {
@@ -356,18 +355,21 @@ function rotateServo(pin, deg) {
         ANALOG_MESSAGE | (pin & 0x0F),
         deg & 0x7F,
         deg >> 0x07]);
-    device.send(msg.buffer);
+    currentDevice.send(msg.buffer);
 }
 
+// block callback
 ext.whenConnected = function () {
     if (notifyConnection) return true;
     return false;
 };
 
+// block callback
 ext.analogWrite = function (pin, val) {
     analogWrite(pin, val);
 };
 
+// block callback
 ext.digitalWrite = function (pin, val) {
     if (val == 'on')
         digitalWrite(pin, HIGH);
@@ -375,14 +377,17 @@ ext.digitalWrite = function (pin, val) {
         digitalWrite(pin, LOW);
 };
 
+// block callback
 ext.analogRead = function (pin) {
     return analogRead(pin);
 };
 
+// block callback
 ext.digitalRead = function (pin) {
     return digitalRead(pin);
 };
 
+// block callback
 ext.whenAnalogRead = function (pin, op, val) {
     if (pin >= 0 && pin < pinModes[ANALOG].length) {
         if (op == '>')
@@ -396,6 +401,7 @@ ext.whenAnalogRead = function (pin, op, val) {
     }
 };
 
+// block callback
 ext.whenDigitalRead = function (pin, val) {
     if (hasCapability(pin, INPUT)) {
         if (val == 'on')
@@ -405,10 +411,12 @@ ext.whenDigitalRead = function (pin, val) {
     }
 };
 
+// block callback
 ext.connectHW = function (hw, pin) {
     hwList.add(hw, pin);
 };
 
+// block callback
 ext.rotateServo = function (servo, deg) {
     var hw = hwList.search(servo);
     if (!hw) return;
@@ -418,6 +426,7 @@ ext.rotateServo = function (servo, deg) {
     hw.val = deg;
 };
 
+// block callback
 ext.changeServo = function (servo, change) {
     var hw = hwList.search(servo);
     if (!hw) return;
@@ -428,6 +437,7 @@ ext.changeServo = function (servo, change) {
     hw.val = deg;
 };
 
+// block callback
 ext.setLED = function (led, val) {
     var hw = hwList.search(led);
     if (!hw) return;
@@ -435,6 +445,7 @@ ext.setLED = function (led, val) {
     hw.val = val;
 };
 
+// block callback
 ext.changeLED = function (led, val) {
     var hw = hwList.search(led);
     if (!hw) return;
@@ -445,6 +456,7 @@ ext.changeLED = function (led, val) {
     hw.val = b;
 };
 
+// block callback
 ext.digitalLED = function (led, val) {
     var hw = hwList.search(led);
     if (!hw) return;
@@ -457,12 +469,14 @@ ext.digitalLED = function (led, val) {
     }
 };
 
+// block callback
 ext.readInput = function (name) {
     var hw = hwList.search(name);
     if (!hw) return;
     return analogRead(hw.pin);
 };
 
+// block callback
 ext.whenButton = function (btn, state) {
     var hw = hwList.search(btn);
     if (!hw) return;
@@ -472,12 +486,14 @@ ext.whenButton = function (btn, state) {
         return !digitalRead(hw.pin);
 };
 
+// block callback
 ext.isButtonPressed = function (btn) {
     var hw = hwList.search(btn);
     if (!hw) return;
     return digitalRead(hw.pin);
 };
 
+// block callback
 ext.whenInput = function (name, op, val) {
     var hw = hwList.search(name);
     if (!hw) return;
@@ -491,6 +507,7 @@ ext.whenInput = function (name, op, val) {
         return false;
 };
 
+// block callback
 ext.mapValues = function (val, aMin, aMax, bMin, bMax) {
     var output = (((bMax - bMin) * (val - aMin)) / (aMax - aMin)) + bMin;
     return Math.round(output);
@@ -512,14 +529,14 @@ var potentialDevices: Device[] = [];
 var devicesSeen: { [id: string]: Device } = {};
 ext._deviceConnected = function (dev: Device) {
     if (dev.id in devicesSeen) {
-        console.log('I have already seen', dev);
+        // console.log('I have already seen', dev);
         return;
     }
     console.log('_deviceConnected: ', dev)
     // console.trace();
     potentialDevices.push(dev);
     devicesSeen[dev.id] = dev;
-    if (!device)
+    if (!currentDevice)
         tryNextDevice();
 };
 
@@ -527,25 +544,27 @@ let poller: number = null;
 let watchdog: number = null;
 function tryNextDevice() {
     console.log('trying next device (1/', potentialDevices.length, ')');
-    device = potentialDevices.shift();
-    if (!device) return;
+    currentDevice = potentialDevices.shift();
+    if (!currentDevice) return;
+
+    const device = currentDevice;
+    device.set_receive_handler(function (data) {
+        console.log("Input Data:");
+        console.log(inputData);
+        var inputData = new Uint8Array(data);
+        processInput(device, inputData);
+    });
 
     device.open({ stopBits: 0, bitRate: 57600, ctsFlowControl: 0 },
         function () {
-            console.log('opened... Attempting connection with ' + device.id);
-            device.set_receive_handler(function (data) {
-                console.log("Input Data:");
-                console.log(inputData);
-                var inputData = new Uint8Array(data);
-                processInput(inputData);
-            });
+            console.log('opened... Attempting connection with ' + device.id, ' with arg ', arguments);
             console.log('...clearing watchdog')
             clearTimeout(watchdog);
             watchdog = null;
 
-            queryFirmware()
+            queryFirmware(device)
             poller = setInterval(function () {
-                queryFirmware();
+                queryFirmware(device);
             }, 1000);
         });
     watchdog = setTimeout(function () {
@@ -556,18 +575,20 @@ function tryNextDevice() {
         device.close();
         console.log('timeout accessing ', device.id);
         delete devicesSeen[device.id];
-        device = null;
+        if (device === currentDevice) {
+            currentDevice = null;
+        }
         tryNextDevice();
     }, 5000);
 }
 
 ext._shutdown = function () {
     // TODO: Bring all pins down 
-    console.trace('Shutting down..', device.id)
-    if (device) device.close();
+    console.trace('Shutting down..', currentDevice.id)
+    if (currentDevice) currentDevice.close();
     if (poller) clearInterval(poller);
-    delete devicesSeen[device.id];
-    device = null;
+    delete devicesSeen[currentDevice.id];
+    currentDevice = null;
 };
 
 export { ext as extension };

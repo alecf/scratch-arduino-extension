@@ -3,4 +3,6 @@ import { descriptor } from './descriptor';
 
 declare var ScratchExtensions;
 
-ScratchExtensions.register('Arduino Debug', descriptor, extension, { type: 'serial' });
+setTimeout(() => {
+    ScratchExtensions.register('Arduino Debug', descriptor, extension, { type: 'serial' });
+}, 1000);
