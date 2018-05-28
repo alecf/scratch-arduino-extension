@@ -2,7 +2,7 @@
   "name": "scratch-arduino-extension",
   "version": "1.0.0",
   "description": "",
-  "main": "arduino_extension.js",
+  "private": true,
   "directories": {
     "example": "examples"
   },
@@ -21,6 +21,8 @@
   },
   "homepage": "https://github.com/alecf/scratch-arduino-extension#readme",
   "devDependencies": {
+    "ts-loader": "^4.3.0",
+    "typescript": "^2.8.3",
     "webpack": "^4.9.1",
     "webpack-cli": "^2.1.4"
   }
